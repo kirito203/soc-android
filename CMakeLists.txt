@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-# Принудительно задаем Android до инициализации проекта
-# 1. Жестко настраиваем Android-окружение до инициализации проекта
+# 1. Настройки Android-окружения
 set(ANDROID_ABI "arm64-v8a" CACHE STRING "" FORCE)
 set(ANDROID_PLATFORM "android-29" CACHE STRING "" FORCE)
 set(ANDROID ON CACHE BOOL "" FORCE)
@@ -14,44 +13,29 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 message(STATUS "=== СБОРКА OPENXRAY ПОД ANDROID ARM64 ===")
 
-# Отключаем десктопные графические API и модули
-# 2. УЛЬТИМАТИВНЫЙ ХАК ДЛЯ ОБХОДА СИНТАКСИСА СЛЭШЕЙ
-# Создаем глобальный переключатель, чтобы знать, какой таргет сейчас собирается
-set(CURRENT_XRAY_TARGET "")
+# 2. УНИВЕРСАЛЬНАЯ И НЕУБИВАЕМАЯ ФУНКЦИЯ ДЛЯ РЕСУРСОВ
+function(target_sources_grouped)
+    list(GET ARGV 0 FIRST_ARG)
+    if(FIRST_ARG STREQUAL "TARGET")
+        list(GET ARGV 1 ACTUAL_TARGET)
+    else()
+        set(ACTUAL_TARGET "${FIRST_ARG}")
+    endif()
 
-macro(add_library TARGET)
-    set(CURRENT_XRAY_TARGET ${TARGET})
-    _add_library(${TARGET} ${ARGN})
-endmacro()
-
-macro(add_executable TARGET)
-    set(CURRENT_XRAY_TARGET ${TARGET})
-    _add_executable(${TARGET} ${ARGN})
-endmacro()
-
-# Переопределяем оригинальный макрос движка. 
-# Теперь он берет аргументы НЕ через переменные (что вызывало ошибку \C),
-# а парсит встроенное системное свойство текущей запущенной команды!
-function(target_sources_grouped TARGET)
-    # Нам больше не нужно читать ${ARGN}. Мы просто берем имя текущего таргета,
-    # который был объявлен в add_library выше.
-    if(CURRENT_XRAY_TARGET)
-        # Собираем аргументы в текстовый блок, экранируя опасные символы
-        string(CONFIGURE "${ARGN}" SAFE_ARGS ESCAPE_QUOTES)
-        
-        # Вырезаем регуляркой всё, что связано с виндовыми фильтрами NAME ... FILES
-        string(REGEX REPLACE "NAME;[^;]+;FILES;" "" CLEAN_FILES "${SAFE_ARGS}")
-        string(REGEX REPLACE "NAME;[^;]+" "" CLEAN_FILES "${CLEAN_FILES}")
-        string(REPLACE "FILES;" "" CLEAN_FILES "${CLEAN_FILES}")
-        
-        # Если после чистки остались файлы, скармливаем их компилятору
-        if(CLEAN_FILES)
-            target_sources(${CURRENT_XRAY_TARGET} PRIVATE ${CLEAN_FILES})
+    set(CLEAN_FILES "")
+    foreach(ITEM IN LISTS ARGV)
+        if(ITEM MATCHES "\\.(cpp|h|hpp|c|cc|cxx|inline|inl|s|S)$")
+            string(REPLACE "\\" "/" SAFE_ITEM "${ITEM}")
+            list(APPEND CLEAN_FILES "${SAFE_ITEM}")
         endif()
+    endforeach()
+
+    if(CLEAN_FILES)
+        target_sources(${ACTUAL_TARGET} PRIVATE ${CLEAN_FILES})
     endif()
 endfunction()
 
-# 3. Отключаем десктопную графику ПК и включаем мобильный OpenGL
+# 3. Конфигурация движка (выключаем ПК-рендеры, включаем мобильный OpenGL)
 set(XRAY_USE_DX9 OFF CACHE BOOL "" FORCE)
 set(XRAY_USE_DX10 OFF CACHE BOOL "" FORCE)
 set(XRAY_USE_DX11 OFF CACHE BOOL "" FORCE)
@@ -61,21 +45,35 @@ set(XRAY_USE_GL ON CACHE BOOL "" FORCE)
 # Берем внутренний LuaJIT из папки Externals
 set(XRAY_USE_LUAJIT ON CACHE BOOL "" FORCE)
 
-# Отключаем тесты и утилиты ПК
-# Отключаем тесты и утилиты SDK
+# Отключаем тесты и SDK-инструменты ПК
 set(XRAY_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(XRAY_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 
-# Глобальные дефайны для совместимости мобильного кода
-# Глобальные дефайны для совместимости мобильного кода C++
+# Глобальные дефайны компилятора для Android
 add_compile_definitions(ANDROID __ANDROID__ _GAPI_GL3_ DISABLE_XRAY_RESOURCES)
 
-# ПОДКУСЫВАЕМ РОДНЫЕ НАСТРОЙКИ ФУНКЦИЙ ДВИЖКА
-# Вместо одного файла подключаем главный скрипт настроек, он сам найдет макросы группировки
-include(${PROJECT_SOURCE_DIR}/cmake/XRay.Macro.cmake)
+# 4. ЗАГЛУШКИ ДЛЯ ВНЕШНИХ ANDROID-ЗАВИСИМОСТЕЙ
+# Оживляем цели, чтобы CMake успешно прошел этап генерации дерева проектов
 
-# Запускаем сборку зависимостей и исходников
-# 4. Запускаем сборку зависимостей и исходников
+# Системные и аудио подсистемы
+add_library(OpenAL::OpenAL INTERFACE IMPORTED)
+add_library(SDL2::SDL2 INTERFACE IMPORTED)
+
+# Архивация и сжатие данных (xrCore)
+add_library(LZO::LZO INTERFACE IMPORTED)
+
+# Аудио-контейнеры и кодеки (xrSound / xrEngine)
+add_library(Ogg::Ogg INTERFACE IMPORTED)
+add_library(Vorbis::Vorbis INTERFACE IMPORTED)
+
+# ИСПРАВЛЕНО: Строго соблюдаем регистр (VorbisFile и VorbisEnc)
+add_library(Vorbis::VorbisFile INTERFACE IMPORTED)
+add_library(Vorbis::VorbisEnc INTERFACE IMPORTED)
+
+# Видео-декодеры для игровых синематиков
+add_library(Theora::Theora INTERFACE IMPORTED)
+add_library(Theora::Theoradec INTERFACE IMPORTED)
+
+# 5. Запуск генерации подпроектов
 add_subdirectory(Externals)
 add_subdirectory(src)
-
