@@ -70,7 +70,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT XRAY_USE_DEFAULT_CXX_LIB)
         if (CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
             add_compile_options(-lcxxrt)
             add_link_options(-lcxxrt)
-        else()
+        elseif (NOT ANDROID)
             add_compile_options(-lc++abi)
             add_link_options(-lc++abi)
         endif()
@@ -80,6 +80,9 @@ endif()
 add_compile_options(-Wno-attributes)
 if (APPLE)
     add_compile_options(-Wl,-undefined,error)
+elseif (ANDROID)
+    # На Android отключаем строгую проверку неразрешенных символов на этапе генерации
+    add_compile_options(-Wl,--allow-shlib-undefined)
 else()
     add_compile_options(-Wl,--no-undefined)
 endif()
@@ -103,7 +106,7 @@ if (XRAY_USE_ASAN)
     )
 endif()
 
-if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" OR CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" OR CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64" OR ANDROID)
     set(PROJECT_PLATFORM_ARM64 TRUE)
 elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "armv*")
     set(PROJECT_PLATFORM_ARM TRUE)
@@ -116,7 +119,8 @@ endif()
 if (PROJECT_PLATFORM_ARM)
     add_compile_options(-mfpu=neon)
 elseif (PROJECT_PLATFORM_ARM64)
-    #add_compile_options()
+    # Настройки для ARM64 (Android смартфоны)
+    add_compile_options(-march=armv8-a)
 elseif (PROJECT_PLATFORM_E2K)
     add_compile_options(-Wno-unknown-pragmas)
 elseif (PROJECT_PLATFORM_PPC)
@@ -140,7 +144,8 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_compile_options(-Og)
 endif()
 
-if (NOT WIN32)
+# Отключаем десктопный поиск пакетов для Android сборки
+if (NOT WIN32 AND NOT ANDROID)
     find_package(SDL2 2.0.18 REQUIRED)
     find_package(OpenAL REQUIRED)
     find_package(JPEG)
@@ -151,8 +156,10 @@ if (NOT WIN32)
     find_package(mimalloc NAMES mimalloc2 mimalloc2.0 mimalloc)
 endif()
 
-# Memory allocator option
-if (mimalloc_FOUND)
+# На Android принудительно используем стандартный аллокатор памяти
+if (ANDROID)
+    set(MEMORY_ALLOCATOR "standard" CACHE STRING "Use specific memory allocator" FORCE)
+elseif (mimalloc_FOUND)
     set(MEMORY_ALLOCATOR "mimalloc" CACHE STRING "Use specific memory allocator (mimalloc/standard)")
 else()
     set(MEMORY_ALLOCATOR "standard" CACHE STRING "Use specific memory allocator (mimalloc/standard)")
@@ -175,9 +182,7 @@ endif()
 
 set(XRAY_ENABLE_WARNINGS
     -Wall
-    #-Werror
     -Wextra
-    #-pedantic
     -Wno-unknown-pragmas
     -Wno-strict-aliasing
     -Wno-parentheses
@@ -185,14 +190,6 @@ set(XRAY_ENABLE_WARNINGS
     -Wno-unused-parameter
     -Wno-switch
     -Wno-trigraphs
-    #-Wno-padded
-    #-Wno-c++98-compat
-    #-Wno-c++98-compat-pedantic
-    #-Wno-c++11-compat
-    #-Wno-c++11-compat-pedantic
-    #-Wno-c++14-compat
-    #-Wno-c++14-compat-pedantic
-    #-Wno-newline-eof
     $<$<CXX_COMPILER_ID:GNU>:$<$<COMPILE_LANGUAGE:CXX>:-Wno-class-memaccess>>
     $<$<CXX_COMPILER_ID:GNU>:$<$<COMPILE_LANGUAGE:CXX>:-Wno-interference-size>>
 )

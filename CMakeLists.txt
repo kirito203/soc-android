@@ -1,27 +1,38 @@
-cmake_minimum_required(VERSION 3.23)
+cmake_minimum_required(VERSION 3.15)
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-include(PreProjectInit)
+# Принудительно задаем Android до инициализации проекта
+set(ANDROID_ABI "arm64-v8a" CACHE STRING "" FORCE)
+set(ANDROID_PLATFORM "android-29" CACHE STRING "" FORCE)
+set(ANDROID ON CACHE BOOL "" FORCE)
 
-calculate_xray_build_id(XRAY_BUILD_ID)
-project(OpenXRay
-    DESCRIPTION "OpenXRay is an improved version of the X-Ray Engine, \
-                the game engine used in the world-famous S.T.A.L.K.E.R. game series by GSC Game World."
-    VERSION 1.6.02.${XRAY_BUILD_ID}
-    HOMEPAGE_URL "https://github.com/OpenXRay/xray-16"
-    LANGUAGES CXX C
-)
+project(XRayEngine)
 
-option(BUILD_SHARED_LIBS "Build shared libraries"     ${BUILD_SHARED_LIBS_DEFAULT_VALUE})
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-option(XRAY_USE_LUAJIT   "Use LuaJIT"                 ON)
-option(XRAY_USE_ASAN     "Use AddressSanitizer"       OFF)
-option(XRAY_ENABLE_TRACY "Enable tracy profiler"      OFF)
+message(STATUS "=== СБОРКА OPENXRAY ПОД ANDROID ARM64 ===")
 
-include(XRay.Build)
-include(XRay.Packaging)
+# Отключаем десктопные графические API и модули
+set(XRAY_USE_DX9 OFF CACHE BOOL "" FORCE)
+set(XRAY_USE_DX10 OFF CACHE BOOL "" FORCE)
+set(XRAY_USE_DX11 OFF CACHE BOOL "" FORCE)
+set(XRAY_USE_SDL ON CACHE BOOL "" FORCE)
+set(XRAY_USE_GL ON CACHE BOOL "" FORCE)
 
+# Берем внутренний LuaJIT из папки Externals
+set(XRAY_USE_LUAJIT ON CACHE BOOL "" FORCE)
+
+# Отключаем тесты и утилиты ПК
+set(XRAY_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(XRAY_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+
+# Глобальные дефайны для совместимости мобильного кода
+add_compile_definitions(ANDROID __ANDROID__ _GAPI_GL3_ DISABLE_XRAY_RESOURCES)
+
+# ПОДКУСЫВАЕМ РОДНЫЕ НАСТРОЙКИ ФУНКЦИЙ ДВИЖКА
+# Вместо одного файла подключаем главный скрипт настроек, он сам найдет макросы группировки
+include(CMake/XRay.Setup.cmake)
+
+# Запускаем сборку зависимостей и исходников
 add_subdirectory(Externals)
 add_subdirectory(src)
-add_subdirectory(res)
-add_subdirectory(misc)
