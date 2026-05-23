@@ -12,7 +12,6 @@ if (APPLE)
     message(STATUS "CMAKE_OSX_DEPLOYMENT_TARGET: ${CMAKE_OSX_DEPLOYMENT_TARGET}")
 endif()
 
-# Redirecting the default installation path /usr/local to /usr no need to use -DCMAKE_INSTALL_PREFIX =/usr
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX "/usr")
 endif()
@@ -38,7 +37,6 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
         message(FATAL_ERROR "Building with a gcc version less than 8.0 is not supported.")
     endif()
 elseif (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    # XXX: Remove -fdelayed-template-parsing
     add_compile_options(
         -fdelayed-template-parsing
         -Wno-unused-command-line-argument
@@ -81,13 +79,11 @@ add_compile_options(-Wno-attributes)
 if (APPLE)
     add_compile_options(-Wl,-undefined,error)
 elseif (ANDROID)
-    # На Android отключаем строгую проверку неразрешенных символов на этапе генерации
     add_compile_options(-Wl,--allow-shlib-undefined)
 else()
     add_compile_options(-Wl,--no-undefined)
 endif()
 
-# TODO test
 if (XRAY_USE_ASAN)
     add_compile_options(
         -fsanitize=address
@@ -97,7 +93,6 @@ if (XRAY_USE_ASAN)
         -fno-optimize-sibling-calls
         -fno-sanitize=vptr
     )
-
     add_link_options(
         $<$<CXX_COMPILER_ID:Clang>:-shared-libasan>
         -fsanitize=address
@@ -119,7 +114,6 @@ endif()
 if (PROJECT_PLATFORM_ARM)
     add_compile_options(-mfpu=neon)
 elseif (PROJECT_PLATFORM_ARM64)
-    # Настройки для ARM64 (Android смартфоны)
     add_compile_options(-march=armv8-a)
 elseif (PROJECT_PLATFORM_E2K)
     add_compile_options(-Wno-unknown-pragmas)
@@ -144,7 +138,7 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_compile_options(-Og)
 endif()
 
-# Отключаем десктопный поиск пакетов для Android сборки
+# Отключаем поиск пакетов для Android
 if (NOT WIN32 AND NOT ANDROID)
     find_package(SDL2 2.0.18 REQUIRED)
     find_package(OpenAL REQUIRED)
@@ -156,7 +150,6 @@ if (NOT WIN32 AND NOT ANDROID)
     find_package(mimalloc NAMES mimalloc2 mimalloc2.0 mimalloc)
 endif()
 
-# На Android принудительно используем стандартный аллокатор памяти
 if (ANDROID)
     set(MEMORY_ALLOCATOR "standard" CACHE STRING "Use specific memory allocator" FORCE)
 elseif (mimalloc_FOUND)
@@ -167,13 +160,12 @@ endif()
 set_property(CACHE MEMORY_ALLOCATOR PROPERTY STRINGS "mimalloc" "standard")
 
 if (MEMORY_ALLOCATOR STREQUAL "mimalloc" AND NOT mimalloc_FOUND)
-    message(FATAL_ERROR "mimalloc allocator requested but not found. Please, install mimalloc package or select standard allocator.")
+    message(FATAL_ERROR "mimalloc allocator requested but not found.")
 endif()
 
 message(STATUS "Using ${MEMORY_ALLOCATOR} memory allocator")
 
 get_property(LIB64 GLOBAL PROPERTY FIND_LIBRARY_USE_LIB64_PATHS)
-
 if ("${LIB64}" STREQUAL "TRUE")
     set(LIBSUFFIX 64)
 else()
@@ -193,5 +185,4 @@ set(XRAY_ENABLE_WARNINGS
     $<$<CXX_COMPILER_ID:GNU>:$<$<COMPILE_LANGUAGE:CXX>:-Wno-class-memaccess>>
     $<$<CXX_COMPILER_ID:GNU>:$<$<COMPILE_LANGUAGE:CXX>:-Wno-interference-size>>
 )
-
 set(XRAY_DISABLE_WARNINGS "-w")
